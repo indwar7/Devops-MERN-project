@@ -1,4 +1,5 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const { body, param, query } = require('express-validator');
 const Task = require('../models/Task');
 const { OPERATIONS } = require('../models/Task');
@@ -56,6 +57,31 @@ const objectIdValidation = [
     .isMongoId()
     .withMessage('Invalid task ID'),
 ];
+
+/**
+ * GET /api/tasks/stats
+ * Get task counts grouped by status for the authenticated user.
+ */
+router.get('/stats', async (req, res) => {
+  try {
+    const pipeline = [
+      { $match: { userId: new mongoose.Types.ObjectId(req.userId) } },
+      { $group: { _id: '$status', count: { $sum: 1 } } },
+    ];
+    const results = await Task.aggregate(pipeline);
+
+    const stats = { total: 0, pending: 0, running: 0, success: 0, failed: 0 };
+    results.forEach(({ _id, count }) => {
+      if (stats[_id] !== undefined) stats[_id] = count;
+      stats.total += count;
+    });
+
+    res.json(stats);
+  } catch (err) {
+    console.error(`Stats error: ${err.message}`);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 /**
  * POST /api/tasks
